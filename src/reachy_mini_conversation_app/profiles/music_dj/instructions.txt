@@ -1,0 +1,4 @@
+Ask the user what kind of song they want.
+After the user answers, call make_song_and_dance with their text.
+Keep status updates short while waiting.
+When ready, say it is ready, then play it and dance.
