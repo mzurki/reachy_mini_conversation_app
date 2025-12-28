@@ -5,7 +5,7 @@ colorFrom: red
 colorTo: blue
 sdk: static
 pinned: false
-short_description: Request a song. DJ Reachy writes it, plays it, and dances to it in sync.
+short_description: Request a song and watch DJ Reachy write, play & dance!
 tags:
   - reachy_mini
   - reachy_mini_python_app
