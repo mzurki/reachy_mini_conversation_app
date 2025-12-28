@@ -233,81 +233,48 @@ async def _play_mp3(path: str, deps: ToolDependencies) -> None:
 
 
 async def _trigger_generation_started(deps: ToolDependencies) -> None:
-    """Trigger the assistant to announce that song generation has started."""
+    """Trigger the assistant to announce that song generation has started. Waits for completion."""
     handler = deps.openai_realtime_handler
-    if handler is None or handler.connection is None:
-        logger.warning("No handler/connection available for generation started announcement")
+    if handler is None:
+        logger.warning("No handler available for generation started announcement")
         return
     
-    try:
-        logger.info("Triggering generation started announcement...")
-        await handler.connection.conversation.item.create(
-            item={
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": "[SYSTEM: Song generation has started. Tell the user!]"}],
-            },
-        )
-        await handler.connection.response.create(
-            response={
-                "instructions": "Tell the user that you're now generating their song and it usually takes about 1 minute. Be brief and enthusiastic! Keep it to one short sentence.",
-            },
-        )
-        logger.info("Generation started announcement sent")
-    except Exception as e:
-        logger.warning("Failed to trigger generation started: %s", e)
+    logger.info("Triggering generation started announcement...")
+    await handler.trigger_response_and_wait(
+        system_message="[SYSTEM: Song generation has started. Tell the user IN ENGLISH!]",
+        response_instructions="Tell the user that you're now generating their song and it usually takes about 1 minute. Be brief and enthusiastic! Keep it to one short sentence. SPEAK ENGLISH ONLY.",
+        timeout=10.0,
+    )
 
 
 async def _trigger_song_ready(deps: ToolDependencies) -> None:
-    """Trigger the assistant to announce the song is ready before playing."""
+    """Trigger the assistant to announce the song is ready. Waits for completion before playing."""
     handler = deps.openai_realtime_handler
-    if handler is None or handler.connection is None:
-        logger.warning("No handler/connection available for song ready announcement")
+    if handler is None:
+        logger.warning("No handler available for song ready announcement")
         return
     
-    try:
-        logger.info("Triggering song ready announcement...")
-        await handler.connection.conversation.item.create(
-            item={
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": "[SYSTEM: The song is ready! Announce it before it plays.]"}],
-            },
-        )
-        await handler.connection.response.create(
-            response={
-                "instructions": "Excitedly announce that the song is ready and you're about to play it now! Keep it brief - one short excited sentence like 'Your song is ready, here it comes!'",
-            },
-        )
-        logger.info("Song ready announcement sent")
-    except Exception as e:
-        logger.warning("Failed to trigger song ready: %s", e)
+    logger.info("Triggering song ready announcement...")
+    await handler.trigger_response_and_wait(
+        system_message="[SYSTEM: The song is ready! Announce it IN ENGLISH before it plays.]",
+        response_instructions="Excitedly announce that the song is ready and you're about to play it now! Keep it brief - one short excited sentence like 'Your song is ready, here it comes!' SPEAK ENGLISH ONLY.",
+        timeout=10.0,
+    )
 
 
 async def _trigger_post_song_feedback(deps: ToolDependencies) -> None:
-    """Trigger the assistant to ask for feedback after the song finishes."""
+    """Trigger the assistant to ask for feedback after the song finishes. Waits for completion."""
     handler = deps.openai_realtime_handler
-    if handler is None or handler.connection is None:
-        logger.warning("No handler/connection available for post-song feedback")
+    if handler is None:
+        logger.warning("No handler available for post-song feedback")
         return
     
-    try:
-        logger.info("Triggering post-song feedback prompt...")
-        await handler.connection.conversation.item.create(
-            item={
-                "type": "message",
-                "role": "user",
-                "content": [{"type": "input_text", "text": "[SYSTEM: The song just finished playing. Ask the user for their feedback!]"}],
-            },
-        )
-        await handler.connection.response.create(
-            response={
-                "instructions": "The song just finished playing. Ask the user what they thought of it and if they'd like another one. Be enthusiastic but brief! Do NOT generate another song without explicit request.",
-            },
-        )
-        logger.info("Post-song feedback prompt sent")
-    except Exception as e:
-        logger.warning("Failed to trigger post-song feedback: %s", e)
+    logger.info("Triggering post-song feedback prompt...")
+    await handler.trigger_response_and_wait(
+        system_message="[SYSTEM: The song just finished playing. Ask the user for their feedback IN ENGLISH!]",
+        response_instructions="The song just finished playing. Ask the user what they thought of it and if they'd like another one. Be enthusiastic but brief! Do NOT generate another song without explicit request. SPEAK ENGLISH ONLY.",
+        timeout=15.0,
+    )
 
 
 class MakeSongAndDance(Tool):

@@ -77,6 +77,10 @@ class OpenaiRealtimeHandler(AsyncStreamHandler):
         # Muting flag for external audio playback (e.g., songs)
         self._mute_output_audio: bool = False
 
+        # Event for waiting on triggered responses to complete
+        self._response_done_event: asyncio.Event = asyncio.Event()
+        self._waiting_for_response: bool = False
+
     def copy(self) -> "OpenaiRealtimeHandler":
         """Create a copy of the handler."""
         return OpenaiRealtimeHandler(self.deps, self.gradio_mode, self.instance_path)
@@ -341,6 +345,10 @@ class OpenaiRealtimeHandler(AsyncStreamHandler):
                 if event.type == "response.done":
                     # Doesn't mean the audio is done playing
                     logger.debug("Response done")
+                    # Signal any waiting trigger that the response is complete
+                    if self._waiting_for_response:
+                        self._response_done_event.set()
+                        self._waiting_for_response = False
 
                 # Handle partial transcription (user speaking in real-time)
                 if event.type == "conversation.item.input_audio_transcription.partial":
@@ -663,6 +671,64 @@ class OpenaiRealtimeHandler(AsyncStreamHandler):
         except Exception:
             return fallback
 
+    async def trigger_response_and_wait(
+        self,
+        system_message: str,
+        response_instructions: str,
+        timeout: float = 15.0,
+    ) -> bool:
+        """Trigger a response and wait for it to complete speaking.
+        
+        Args:
+            system_message: The [SYSTEM: ...] message to inject
+            response_instructions: Instructions for this specific response
+            timeout: Maximum time to wait for response completion
+            
+        Returns:
+            True if response completed, False if timed out or failed
+        """
+        if not self.connection:
+            logger.debug("No connection, cannot trigger response")
+            return False
+        
+        try:
+            # Reset the event and set waiting flag
+            self._response_done_event.clear()
+            self._waiting_for_response = True
+            
+            # Create the system message
+            await self.connection.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": system_message}],
+                },
+            )
+            
+            # Trigger the response with specific instructions
+            await self.connection.response.create(
+                response={
+                    "instructions": response_instructions + " Always respond in ENGLISH.",
+                },
+            )
+            
+            # Wait for the response to complete (response.done event)
+            try:
+                await asyncio.wait_for(self._response_done_event.wait(), timeout=timeout)
+                logger.info("Triggered response completed")
+                # Give a small buffer for audio to finish playing
+                await asyncio.sleep(0.5)
+                return True
+            except asyncio.TimeoutError:
+                logger.warning("Triggered response timed out after %.1fs", timeout)
+                self._waiting_for_response = False
+                return False
+                
+        except Exception as e:
+            logger.warning("Failed to trigger response: %s", e)
+            self._waiting_for_response = False
+            return False
+
     async def _send_startup_greeting(self) -> None:
         """Send a startup signal to trigger the automatic greeting."""
         if not self.connection:
@@ -670,22 +736,11 @@ class OpenaiRealtimeHandler(AsyncStreamHandler):
             return
         
         logger.info("Triggering startup greeting...")
-        try:
-            await self.connection.conversation.item.create(
-                item={
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": "[SYSTEM: Application just started. Greet the user warmly and ask what kind of song they'd like you to create. Be enthusiastic!]"}],
-                },
-            )
-            await self.connection.response.create(
-                response={
-                    "instructions": "The application just started. Give a warm, enthusiastic greeting and ask the user what kind of song they'd like. Do NOT generate any songs yet - just greet and ask.",
-                },
-            )
-            logger.info("Startup greeting triggered")
-        except Exception as e:
-            logger.warning("Failed to send startup greeting: %s", e)
+        await self.trigger_response_and_wait(
+            system_message="[SYSTEM: Application just started. Greet the user warmly in ENGLISH and ask what kind of song they'd like you to create. Be enthusiastic!]",
+            response_instructions="The application just started. Give a warm, enthusiastic greeting IN ENGLISH and ask the user what kind of song they'd like. Do NOT generate any songs yet - just greet and ask. SPEAK ENGLISH ONLY.",
+            timeout=20.0,
+        )
 
     async def send_idle_signal(self, idle_duration: float) -> None:
         """Send an idle signal to the openai server."""
