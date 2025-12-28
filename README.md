@@ -5,7 +5,7 @@ colorFrom: red
 colorTo: blue
 sdk: static
 pinned: false
-short_description: Tell DJ Reachy what kind of song you want, and watch as it generates music and grooves along!
+short_description: Request a song. DJ Reachy writes it, plays it, and dances to it in sync.
 tags:
   - reachy_mini
   - reachy_mini_python_app
