@@ -232,54 +232,15 @@ async def _play_mp3(path: str, deps: ToolDependencies) -> None:
         handler.unmute_output_audio()
 
 
-async def _trigger_generation_started(deps: ToolDependencies) -> None:
-    """Trigger the assistant to announce that song generation has started. Waits for completion."""
-    handler = deps.openai_realtime_handler
-    if handler is None:
-        logger.warning("No handler available for generation started announcement")
-        return
-    
-    logger.info("Triggering generation started announcement...")
-    await handler.trigger_response_and_wait(
-        system_message="[SYSTEM: Song generation has started. Tell the user IN ENGLISH!]",
-        response_instructions="Tell the user that you're now generating their song and it usually takes about 1 minute. Be brief and enthusiastic! Keep it to one short sentence. SPEAK ENGLISH ONLY.",
-        timeout=10.0,
-    )
-
-
-async def _trigger_song_ready(deps: ToolDependencies) -> None:
-    """Trigger the assistant to announce the song is ready. Waits for completion before playing."""
-    handler = deps.openai_realtime_handler
-    if handler is None:
-        logger.warning("No handler available for song ready announcement")
-        return
-    
-    logger.info("Triggering song ready announcement...")
-    await handler.trigger_response_and_wait(
-        system_message="[SYSTEM: The song is ready! Announce it IN ENGLISH before it plays.]",
-        response_instructions="Excitedly announce that the song is ready and you're about to play it now! Keep it brief - one short excited sentence like 'Your song is ready, here it comes!' SPEAK ENGLISH ONLY.",
-        timeout=10.0,
-    )
-
-
-async def _trigger_post_song_feedback(deps: ToolDependencies) -> None:
-    """Trigger the assistant to ask for feedback after the song finishes. Waits for completion."""
-    handler = deps.openai_realtime_handler
-    if handler is None:
-        logger.warning("No handler available for post-song feedback")
-        return
-    
-    logger.info("Triggering post-song feedback prompt...")
-    await handler.trigger_response_and_wait(
-        system_message="[SYSTEM: The song just finished playing. Ask the user for their feedback IN ENGLISH!]",
-        response_instructions="The song just finished playing. Ask the user what they thought of it and if they'd like another one. Be enthusiastic but brief! Do NOT generate another song without explicit request. SPEAK ENGLISH ONLY.",
-        timeout=15.0,
-    )
 
 
 class MakeSongAndDance(Tool):
     name = "make_song_and_dance"
-    description = "Generate a song from a short text prompt, then play it on Reachy and dance."
+    description = (
+        "Generate a song from a short text prompt, then play it on Reachy and dance. "
+        "IMPORTANT: Before calling this tool, you MUST tell the user 'Generating your song now, this takes about a minute!' in ENGLISH. "
+        "After the tool completes, ask the user for feedback in ENGLISH."
+    )
     parameters_schema = {
         "type": "object",
         "properties": {
@@ -301,20 +262,17 @@ class MakeSongAndDance(Tool):
 
         logger.info("Tool call: make_song_and_dance (ElevenLabs compose)")
 
-        # Trigger: Announce generation started
-        await _trigger_generation_started(deps)
-
+        # Generate the song (this takes ~1 minute)
         mp3_path = await asyncio.to_thread(_compose_music_to_mp3, prompt, compose_timeout_s, deps)
-
-        # Trigger: Announce song is ready before playing
-        await _trigger_song_ready(deps)
 
         # Play MP3 with real-time audio-reactive dancing
         # Dancing starts automatically when playback begins and fades out when it ends
         await _play_mp3(mp3_path, deps)
         logger.info("Song saved permanently at %s", mp3_path)
-        
-        # Trigger post-song feedback prompt
-        await _trigger_post_song_feedback(deps)
 
-        return {"status": "ok", "provider": "elevenlabs", "song_path": mp3_path}
+        # Return status - the LLM should ask for feedback after seeing this
+        return {
+            "status": "completed",
+            "message": "Song finished playing! Now ask the user what they thought and if they want another one. SPEAK ENGLISH.",
+            "song_path": mp3_path,
+        }

@@ -736,11 +736,22 @@ class OpenaiRealtimeHandler(AsyncStreamHandler):
             return
         
         logger.info("Triggering startup greeting...")
-        await self.trigger_response_and_wait(
-            system_message="[SYSTEM: Application just started. Greet the user warmly in ENGLISH and ask what kind of song they'd like you to create. Be enthusiastic!]",
-            response_instructions="The application just started. Give a warm, enthusiastic greeting IN ENGLISH and ask the user what kind of song they'd like. Do NOT generate any songs yet - just greet and ask. SPEAK ENGLISH ONLY.",
-            timeout=20.0,
-        )
+        try:
+            await self.connection.conversation.item.create(
+                item={
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "[SYSTEM: Application just started. Greet the user warmly in ENGLISH and ask what kind of song they'd like!]"}],
+                },
+            )
+            await self.connection.response.create(
+                response={
+                    "instructions": "Give a warm, enthusiastic greeting IN ENGLISH and ask the user what kind of song they'd like. Do NOT generate any songs - just greet and ask. SPEAK ENGLISH ONLY.",
+                },
+            )
+            logger.info("Startup greeting triggered")
+        except Exception as e:
+            logger.warning("Failed to send startup greeting: %s", e)
 
     async def send_idle_signal(self, idle_duration: float) -> None:
         """Send an idle signal to the openai server."""
