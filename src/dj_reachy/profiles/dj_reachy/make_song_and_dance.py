@@ -232,6 +232,58 @@ async def _play_mp3(path: str, deps: ToolDependencies) -> None:
         handler.unmute_output_audio()
 
 
+async def _trigger_generation_started(deps: ToolDependencies) -> None:
+    """Trigger the assistant to announce that song generation has started."""
+    handler = deps.openai_realtime_handler
+    if handler is None or handler.connection is None:
+        logger.warning("No handler/connection available for generation started announcement")
+        return
+    
+    try:
+        logger.info("Triggering generation started announcement...")
+        await handler.connection.conversation.item.create(
+            item={
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "[SYSTEM: Song generation has started. Tell the user!]"}],
+            },
+        )
+        await handler.connection.response.create(
+            response={
+                "instructions": "Tell the user that you're now generating their song and it usually takes about 1 minute. Be brief and enthusiastic! Keep it to one short sentence.",
+            },
+        )
+        logger.info("Generation started announcement sent")
+    except Exception as e:
+        logger.warning("Failed to trigger generation started: %s", e)
+
+
+async def _trigger_song_ready(deps: ToolDependencies) -> None:
+    """Trigger the assistant to announce the song is ready before playing."""
+    handler = deps.openai_realtime_handler
+    if handler is None or handler.connection is None:
+        logger.warning("No handler/connection available for song ready announcement")
+        return
+    
+    try:
+        logger.info("Triggering song ready announcement...")
+        await handler.connection.conversation.item.create(
+            item={
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "[SYSTEM: The song is ready! Announce it before it plays.]"}],
+            },
+        )
+        await handler.connection.response.create(
+            response={
+                "instructions": "Excitedly announce that the song is ready and you're about to play it now! Keep it brief - one short excited sentence like 'Your song is ready, here it comes!'",
+            },
+        )
+        logger.info("Song ready announcement sent")
+    except Exception as e:
+        logger.warning("Failed to trigger song ready: %s", e)
+
+
 async def _trigger_post_song_feedback(deps: ToolDependencies) -> None:
     """Trigger the assistant to ask for feedback after the song finishes."""
     handler = deps.openai_realtime_handler
@@ -250,7 +302,7 @@ async def _trigger_post_song_feedback(deps: ToolDependencies) -> None:
         )
         await handler.connection.response.create(
             response={
-                "instructions": "The song just finished playing. Ask the user what they thought of it and if they'd like another one. Be enthusiastic! Do NOT generate another song without explicit request.",
+                "instructions": "The song just finished playing. Ask the user what they thought of it and if they'd like another one. Be enthusiastic but brief! Do NOT generate another song without explicit request.",
             },
         )
         logger.info("Post-song feedback prompt sent")
@@ -282,7 +334,13 @@ class MakeSongAndDance(Tool):
 
         logger.info("Tool call: make_song_and_dance (ElevenLabs compose)")
 
+        # Trigger: Announce generation started
+        await _trigger_generation_started(deps)
+
         mp3_path = await asyncio.to_thread(_compose_music_to_mp3, prompt, compose_timeout_s, deps)
+
+        # Trigger: Announce song is ready before playing
+        await _trigger_song_ready(deps)
 
         # Play MP3 with real-time audio-reactive dancing
         # Dancing starts automatically when playback begins and fades out when it ends
