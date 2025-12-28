@@ -60,4 +60,3 @@ cache/
 # User-created personalities (managed by UI)
 src/reachy_mini_conversation_app/profiles/user_personalities/
 out.mp3
-docs/assets/dj-reachy.mp4
